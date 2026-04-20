@@ -1,0 +1,258 @@
+-Configuración SANTIAGO
+NetSec Solutions SRL - Empresa 1
+
+===================
+R-Santiago
+===================
+
+en
+conf t
+hostname R-SANTIAGO
+
+no ip cef
+
+username admin privilege 15 secret N3tS3c-2025
+ip domain-name netsec-solutions.com.do
+crypto key generate rsa modulus 1024
+
+aaa new-model
+radius-server host 10.17.0.43 auth-port 1812 acct-port 1813 key NetSecSecret123
+aaa authentication login default group radius local
+aaa authorization exec default group radius local 
+ip ssh version 2
+
+access-list 7 remark SOLO-ACCESO-TI-STGO
+access-list 7 permit 10.17.0.0 0.0.0.31
+access-list 7 deny any 
+
+line vty 0 4
+transport input ssh
+login authentication default
+access-class 7 in
+exit
+
+int e0/1.40
+encapsulation dot1Q 40
+description TI-STGO
+ip add 10.17.0.1 255.255.255.224
+ip helper-address 10.17.0.44
+ip nat inside
+no shutdown
+exit
+
+int e0/1.100
+encapsulation dot1Q 100
+description DATACENTER-STGO
+ip add 10.17.0.33 255.255.255.240
+ip nat inside
+no shutdown
+exit
+
+int e0/1.50
+encapsulation dot1Q 50
+description ADMINISTRACION-STGO
+ip add 10.17.0.49 255.255.255.248
+ip helper-address 10.17.0.44
+ip nat inside
+no shutdown
+exit
+
+int e0/1.888
+encapsulation dot1Q 888 native
+description NATIVA
+ip add 10.17.0.57 255.255.255.248
+no shutdown
+exit
+
+interface e0/1
+duplex half
+no shut 
+exit
+
+interface e0/0
+duplex half
+description IP-PUBLICA-VISTA-ISP
+ip add dhcp
+ip nat outside
+no shut
+exit
+
+int tunnel 1
+ip add 10.16.2.74 255.255.255.248
+tunnel source e0/0
+tunnel mode gre multipoint
+ip nhrp network-id 10
+ip nhrp authentication NetSec
+ip nhrp map multicast dynamic
+ip mtu 1400
+ip tcp adjust-mss 1360
+exit
+
+interface tunnel 1
+ip ospf network broadcast
+ip ospf priority 255
+exit
+ 
+crypto isakmp policy 1
+encryption aes
+hash sha512
+authentication pre-share
+group 14
+lifetime 86400
+exit
+
+crypto isakmp keepalive 10 10
+crypto isakmp invalid-spi-recovery
+
+crypto isakmp key N3tS3cVPN address 0.0.0.0 0.0.0.0
+crypto ipsec transform-set NS-VPN esp-aes esp-sha512-hmac
+mode transport
+exit
+ 
+crypto ipsec profile NETSEC-VPN
+set transform-set NS-VPN
+exit
+ 
+interface tunnel 1
+tunnel protection ipsec profile NETSEC-VPN
+exit
+
+router ospf 1
+router-id 10.0.0.0
+net 10.17.0.0 0.0.0.31 area 0
+net 10.17.0.32 0.0.0.15 area 0
+net 10.17.0.48 0.0.0.7 area 0
+net 10.16.2.72 0.0.0.7 area 0
+Passive-interface e0/1.40
+Passive-interface e0/1.50
+Passive-interface e0/1.100
+Passive-interface e0/1.888
+exit
+
+ip access-list standard PAT
+permit 10.17.0.0 0.0.255.255
+exit
+
+ip nat inside source list PAT int e0/0 overload
+exit
+
+===========
+SW9 (SWAC9)
+===========
+
+enable
+conf t
+hostname SWAC9
+
+aaa new-model
+username admin privilege 15 secret N3tS3c-2025
+ip domain-name netsec-solutions.com.do
+crypto key generate rsa modulus 1024
+
+ip ssh version 2
+
+radius server SRV-NETSEC
+address ipv4 10.17.0.43 auth-port 1812 acct-port 1813
+key NetSecSecret123
+exit
+
+aaa group server radius GRUPO-NETSEC
+server name SRV-NETSEC
+exit
+
+aaa authentication login default group GRUPO-NETSEC local
+aaa authorization exec default group GRUPO-NETSEC local
+
+access-list 7 remark SOLO-ACCESO-TI-STGO
+access-list 7 permit 10.17.0.0 0.0.0.31
+access-list 7 deny any 
+
+line vty 0 4
+transport input ssh
+login authentication default
+access-class 7 in
+exit
+
+vlan 40
+Name TI-STGO
+vlan 100
+Name DATACENTER-STGO
+vlan 50 
+name ADMINISTRACION-STGO
+vlan 888
+name NATIVA
+
+ip dhcp snooping
+ip dhcp snooping vlan 40,50,100
+no ip dhcp snooping information option
+
+int e0/1
+description TRUNK-A-ROUTER
+switchport trunk encapsulation dot1q
+switchport mode trunk
+switchport trunk native vlan 888
+switchport trunk allowed vlan 40,100,50,888
+duplex full
+ip dhcp snooping trust
+exit
+
+int range e1/0, e1/2
+sw mo ac
+sw ac vlan 888
+exit
+
+int vlan 888
+ip address 10.17.0.58 255.255.255.248
+description Native
+no shutdown
+exit
+
+spanning-tree mode rapid-pvst
+
+interface e1/3
+description ADMINISTRACION
+switchport mode access
+switchport access vlan 50
+spanning-tree portfast
+spanning-tree bpduguard enable
+switchport port-security
+switchport port-security maximum 2
+switchport port-security violation restrict
+switchport port-security mac-address sticky
+exit
+
+interface e1/1
+description TI-SEGURIDAD
+switchport mode access
+switchport access vlan 40
+spanning-tree portfast
+spanning-tree bpduguard enable
+switchport port-security
+switchport port-security maximum 2
+switchport port-security violation restrict
+switchport port-security mac-address sticky
+exit
+
+interface range e0/0, e0/3
+description SERVIDORES
+switchport mode access
+switchport access vlan 100
+spanning-tree portfast
+spanning-tree bpduguard enable
+ip dhcp snooping trust
+exit
+
+interface e0/2
+description WIN-VLAN40
+switchport mode access
+switchport access vlan 40
+spanning-tree portfast
+spanning-tree bpduguard enable
+switchport port-security
+switchport port-security maximum 2
+switchport port-security violation restrict
+switchport port-security mac-address sticky
+exit
+
+ip default-gateway 10.17.0.57 
+do wr
