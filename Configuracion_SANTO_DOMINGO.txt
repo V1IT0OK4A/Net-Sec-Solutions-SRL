@@ -1,0 +1,713 @@
+-CONFIGURACION SANTO DOMINGO
+NetSec Solutions SRL - Empresa 1
+
+=================
+R-Santo Domingo
+=================
+
+enable
+conf t
+hostname SAN-DOM
+
+ip cef
+
+username admin privilege 15 secret N3tS3c-2025
+ip domain-name netsec-solutions.com.do
+crypto key generate rsa modulus 1024
+aaa new-model
+radius-server host 10.17.0.43 auth-port 1812 acct-port 1813 key NetSecSecret123
+aaa authentication login default group radius local
+aaa authorization exec default group radius local 
+ip ssh version 2
+
+access-list 7 remark SOLO-ACCESO-TI-STGO
+access-list 7 permit 10.17.0.0 0.0.0.31
+access-list 7 deny any 
+
+line vty 0 4
+ transport input ssh
+ login authentication default
+ access-class 7 in
+exit
+
+crypto isakmp nat-keepalive 20
+
+interface e0/2
+ description CONECTION TO ISP
+ ip address dhcp
+ ip nat outside
+ duplex full
+ no shutdown
+exit
+
+interface e0/0
+ description CONECTION TO SWM1
+ ip address 10.16.2.81 255.255.255.252
+ ip ospf network point-to-point
+ ip nat inside
+ duplex full
+ no shutdown
+exit
+
+interface e0/1
+ description CONECTION TO SWM2
+ ip address 10.16.2.85 255.255.255.252
+ ip ospf network point-to-point
+ ip nat inside
+ duplex full
+ no shutdown
+exit
+
+crypto isakmp policy 1
+ encryption aes
+ hash sha512
+ authentication pre-share
+ group 14
+ lifetime 86400
+exit
+
+crypto isakmp key N3tS3cVPN address 0.0.0.0 0.0.0.0
+crypto isakmp invalid-spi-recovery
+
+crypto ipsec transform-set NS-VPN esp-aes esp-sha512-hmac
+ mode transport
+exit
+
+crypto ipsec profile NETSEC-VPN
+ set transform-set NS-VPN
+exit
+
+interface Tunnel1
+ description *** DMVPN SPOKE TO SANTIAGO ***
+ ip address 10.16.2.73 255.255.255.248 
+ tunnel source e0/2
+ tunnel mode gre multipoint
+ tunnel key 10
+ tunnel protection ipsec profile NETSEC-VPN
+ 
+ ip nhrp network-id 10
+ ip nhrp authentication NetSec
+ ip nhrp map multicast dynamic
+ ip nhrp map 10.16.2.74 1.0.0.9
+ ip nhrp map multicast 1.0.0.9
+ ip nhrp nhs 10.16.2.74
+ 
+ ip mtu 1400
+ ip tcp adjust-mss 1360
+ ip ospf network point-to-multipoint
+ ip ospf hello-interval 30
+ ip ospf mtu-ignore
+ ip ospf priority 0
+ no shutdown
+exit
+
+access-list 1 permit 10.16.0.0 0.0.255.255
+ip nat inside source list 1 interface e0/2 overload
+
+ip route 0.0.0.0 0.0.0.0 Ethernet0/2
+
+router ospf 1
+ router-id 2.2.2.2
+ network 10.16.2.80 0.0.0.3 area 0
+ network 10.16.2.84 0.0.0.3 area 0
+ network 10.16.2.72 0.0.0.7 area 0
+ default-information originate always
+exit
+
+
+===========================
+    SWM1-SANTO DOMINGO
+===========================
+
+enable
+conf t
+hostname SWM1
+
+ip routing
+ip cef
+no ip domain-lookup
+no ip dhcp snooping
+
+aaa new-model
+username admin privilege 15 secret N3tS3c-2025
+ip domain-name netsec-solutions.com.do
+crypto key generate rsa modulus 1024
+ip ssh version 2
+
+radius server SRV-NETSEC
+ address ipv4 10.17.0.43 auth-port 1812 acct-port 1813
+ key NetSecSecret123
+ exit
+
+aaa group server radius GRUPO-NETSEC
+ server name SRV-NETSEC
+ exit
+
+aaa authentication login default group GRUPO-NETSEC local
+aaa authorization exec default group GRUPO-NETSEC local
+
+access-list 7 remark SOLO-ACCESO-TI-STGO
+access-list 7 permit 10.17.0.0 0.0.0.31
+access-list 7 deny any 
+
+line vty 0 4
+ transport input ssh
+ login authentication default
+ access-class 7 in
+ exit
+
+vtp version 2
+vtp mode server
+vtp domain SANTO-DOMINGO
+vtp password N3tS3c
+
+vlan 10
+ name MARKETING-SD
+exit
+vlan 15
+ name RRHH-SD
+exit
+vlan 20
+ name VENTAS-SD 
+exit
+vlan 30
+ name CONTABILIDAD-SD 
+exit
+vlan 999
+ name NATIVA 
+exit
+
+
+interface e0/0
+ description CONECTADO A ROUTER
+ no switchport
+ ip address 10.16.2.82 255.255.255.252
+ ip ospf network point-to-point
+ duplex full
+ no shutdown
+ exit
+
+interface range e0/1-3
+ description TRUNK-TO-SWM2
+ switchport trunk encapsulation dot1q
+ switchport mode trunk
+ switchport trunk native vlan 999
+ switchport trunk allowed vlan 10,15,20,30,999
+ switchport nonegotiate
+ duplex full
+ no shutdown
+ exit
+
+interface range e1/0-3, e2/0-3
+ description DOWNLINKS-TO-ACCESS
+ switchport trunk encapsulation dot1q
+ switchport mode trunk
+ switchport trunk native vlan 999
+ switchport trunk allowed vlan 10,15,20,30,999
+ switchport nonegotiate
+ duplex full
+ no shutdown
+ exit
+
+
+interface Vlan10
+ description MARKETING
+ ip address 10.16.0.2 255.255.255.128
+ ip helper-address 10.17.0.44
+ standby version 2
+ standby 10 ip 10.16.0.1
+ standby 10 priority 255
+ standby 10 preempt
+ no shutdown
+ exit
+
+interface Vlan15
+ description RRHH
+ ip address 10.16.1.2 255.255.255.128
+ ip helper-address 10.17.0.44
+ standby version 2
+ standby 15 ip 10.16.1.1
+ standby 15 priority 255
+ standby 15 preempt
+ no shutdown
+ exit
+
+interface Vlan20
+ description VENTAS
+ ip address 10.16.1.130 255.255.255.128
+ ip helper-address 10.17.0.44
+ standby version 2
+ standby 20 ip 10.16.1.129
+ standby 20 priority 255
+ standby 20 preempt
+ no shutdown
+ exit
+
+interface Vlan30
+ description CONTABILIDAD
+ ip address 10.16.2.2 255.255.255.192
+ ip helper-address 10.17.0.44
+ standby version 2
+ standby 30 ip 10.16.2.1
+ standby 30 priority 255
+ standby 30 preempt
+ no shutdown
+ exit
+
+interface Vlan999
+ description GESTION
+ ip address 10.16.2.66 255.255.255.248
+ standby version 2
+ standby 99 ip 10.16.2.65
+ standby 99 priority 255
+ standby 99 preempt
+ no shutdown
+ exit
+
+router ospf 1
+ router-id 0.0.10.10
+ passive-interface Vlan10
+ passive-interface Vlan15
+ passive-interface Vlan20
+ passive-interface Vlan30
+ passive-interface Vlan999
+ network 10.16.0.0 0.0.0.255 area 0
+ network 10.16.1.0 0.0.0.127 area 0
+ network 10.16.1.128 0.0.0.127 area 0
+ network 10.16.2.0 0.0.0.63 area 0
+ network 10.16.2.64 0.0.0.7 area 0
+ network 10.16.2.80 0.0.0.3 area 0
+ exit
+
+end
+write
+
+===========================
+    SWM2-SANTO DOMINGO
+===========================
+
+enable
+conf t
+hostname SWM2
+
+ip routing
+ip cef
+no ip domain-lookup
+no ip dhcp snooping
+
+aaa new-model
+username admin privilege 15 secret N3tS3c-2025
+ip domain-name netsec-solutions.com.do
+crypto key generate rsa modulus 1024
+ip ssh version 2
+
+radius server SRV-NETSEC
+ address ipv4 10.17.0.43 auth-port 1812 acct-port 1813
+ key NetSecSecret123
+ exit
+
+aaa group server radius GRUPO-NETSEC
+ server name SRV-NETSEC
+ exit
+
+aaa authentication login default group GRUPO-NETSEC local
+aaa authorization exec default group GRUPO-NETSEC local
+
+access-list 7 remark SOLO-ACCESO-TI-STGO
+access-list 7 permit 10.17.0.0 0.0.0.31
+access-list 7 deny any 
+
+line vty 0 4
+ transport input ssh
+ login authentication default
+ access-class 7 in
+ exit
+
+vtp version 2
+vtp mode server
+vtp domain SANTO-DOMINGO
+vtp password N3tS3c
+
+
+interface e0/0
+ description CONECTADO A ROUTER
+ no switchport
+ ip address 10.16.2.86 255.255.255.252
+ ip ospf network point-to-point
+ duplex full
+ no shutdown
+ exit
+
+interface range e0/1-3
+ description TRUNK-TO-SWM1
+ switchport trunk encapsulation dot1q
+ switchport mode trunk
+ switchport trunk native vlan 999
+ switchport trunk allowed vlan 10,15,20,30,999
+ switchport nonegotiate
+ duplex full
+ no shutdown
+ exit
+
+interface range e1/0-3, e2/0-3
+ description DOWNLINKS-TO-ACCESS
+ switchport trunk encapsulation dot1q
+ switchport mode trunk
+ switchport trunk native vlan 999
+ switchport trunk allowed vlan 10,15,20,30,999
+ switchport nonegotiate
+ duplex full
+ no shutdown
+ exit
+
+
+interface Vlan10
+ description MARKETING
+ ip address 10.16.0.3 255.255.255.128
+ ip helper-address 10.17.0.44
+ standby version 2
+ standby 10 ip 10.16.0.1
+ standby 10 priority 150
+ standby 10 preempt
+ no shutdown
+ exit
+
+interface Vlan15
+ description RRHH
+ ip address 10.16.1.3 255.255.255.128
+ ip helper-address 10.17.0.44
+ standby version 2
+ standby 15 ip 10.16.1.1
+ standby 15 priority 150
+ standby 15 preempt
+ no shutdown
+ exit
+
+interface Vlan20
+ description VENTAS
+ ip address 10.16.1.131 255.255.255.128
+ ip helper-address 10.17.0.44
+ standby version 2
+ standby 20 ip 10.16.1.129
+ standby 20 priority 150
+ standby 20 preempt
+ no shutdown
+ exit
+
+interface Vlan30
+ description CONTABILIDAD
+ ip address 10.16.2.3 255.255.255.192
+ ip helper-address 10.17.0.44
+ standby version 2
+ standby 30 ip 10.16.2.1
+ standby 30 priority 150
+ standby 30 preempt
+ no shutdown
+ exit
+
+interface Vlan999
+ description GESTION
+ ip address 10.16.2.67 255.255.255.248
+ standby version 2
+ standby 99 ip 10.16.2.65
+ standby 99 priority 150
+ standby 99 preempt
+ no shutdown
+ exit
+
+router ospf 1
+ router-id 0.0.10.9
+ passive-interface Vlan10
+ passive-interface Vlan15
+ passive-interface Vlan20
+ passive-interface Vlan30
+ passive-interface Vlan999
+ network 10.16.0.0 0.0.0.255 area 0
+ network 10.16.1.0 0.0.0.127 area 0
+ network 10.16.1.128 0.0.0.127 area 0
+ network 10.16.2.0 0.0.0.63 area 0
+ network 10.16.2.64 0.0.0.7 area 0
+ network 10.16.2.84 0.0.0.3 area 0
+ exit
+
+end
+write
+
+=======================
+       SWAC1
+=======================
+
+enable
+conf t
+hostname SWAC1
+
+no ip routing
+no ip domain-lookup
+
+vtp version 2
+vtp mode client
+vtp domain SANTO-DOMINGO
+vtp password N3tS3c
+
+interface vlan999
+description VLAN 999 NATIVA
+ip address 10.16.2.68 255.255.255.248
+no shutdown
+exit
+
+ip dhcp snooping
+ip dhcp snooping vlan 10,15,20,30
+no ip dhcp snooping information option
+
+interface range e0/0-3 
+switchport mode access
+switchport access vlan 999
+duplex full
+exit
+
+interface range e0/0-1
+description LINK-TO-SWM
+switchport trunk encapsulation dot1q
+switchport mode trunk
+switchport trunk native vlan 999
+switchport trunk allowed vlan 10,15,20,30,999
+switchport nonegotiate
+duplex full
+ip dhcp snooping trust
+exit
+
+spanning-tree mode rapid-pvst
+
+interface e0/2
+switchport access vlan 10
+spanning-tree portfast
+spanning-tree bpduguard enable
+switchport port-security
+switchport port-security maximum 2
+switchport port-security violation restrict
+switchport port-security mac-address sticky
+no shutdown
+exit
+
+ip default-gateway 10.16.2.65
+
+aaa new-model
+username admin privilege 15 secret N3tS3c-2025
+ip domain-name netsec-solutions.com.do
+crypto key generate rsa modulus 1024
+
+ip ssh version 2
+
+radius server SRV-NETSEC
+address ipv4 10.17.0.43 auth-port 1812 acct-port 1813
+key NetSecSecret123
+exit
+
+aaa group server radius GRUPO-NETSEC
+server name SRV-NETSEC
+exit
+
+aaa authentication login default group GRUPO-NETSEC local
+aaa authorization exec default group GRUPO-NETSEC local
+
+access-list 7 remark SOLO-ACCESO-TI-STGO
+access-list 7 permit 10.17.0.0 0.0.0.31
+access-list 7 deny any 
+
+line vty 0 4
+transport input ssh
+login authentication default
+access-class 7 in
+exit
+
+do wr
+
+
+=======================
+       SWAC2
+=======================
+
+enable
+conf t
+hostname SWAC2
+
+no ip routing
+no ip domain-lookup
+
+vtp version 2
+vtp mode client
+vtp domain SANTO-DOMINGO
+vtp password N3tS3c
+
+interface vlan999
+description VLAN 999 NATIVA
+ip address 10.16.2.69 255.255.255.248
+no shutdown
+exit
+
+interface range e0/0-3 
+switchport mode access
+switchport access vlan 999
+duplex full
+exit
+
+ip dhcp snooping
+ip dhcp snooping vlan 10,15,20,30
+no ip dhcp snooping information option
+
+interface range e0/0-1
+description LINK-TO-SWM
+switchport trunk encapsulation dot1q
+switchport mode trunk
+switchport trunk native vlan 999
+switchport trunk allowed vlan 10,15,20,30,999
+switchport nonegotiate
+duplex full
+ip dhcp snooping trust
+exit
+
+spanning-tree mode rapid-pvst
+
+interface e0/2
+switchport access vlan 15
+spanning-tree portfast
+spanning-tree bpduguard enable
+switchport port-security
+switchport port-security maximum 2
+switchport port-security violation restrict
+switchport port-security mac-address sticky
+no shutdown
+exit
+
+ip default-gateway 10.16.2.65
+
+aaa new-model
+username admin privilege 15 secret N3tS3c-2025
+ip domain-name netsec-solutions.com.do
+crypto key generate rsa modulus 1024
+
+ip ssh version 2
+
+radius server SRV-NETSEC
+address ipv4 10.17.0.43 auth-port 1812 acct-port 1813
+key NetSecSecret123
+exit
+
+aaa group server radius GRUPO-NETSEC
+server name SRV-NETSEC
+exit
+
+aaa authentication login default group GRUPO-NETSEC local
+aaa authorization exec default group GRUPO-NETSEC local
+
+access-list 7 remark SOLO-ACCESO-TI-STGO
+access-list 7 permit 10.17.0.0 0.0.0.31
+access-list 7 deny any 
+
+line vty 0 4
+transport input ssh
+login authentication default
+access-class 7 in
+exit
+
+do wr
+
+=======================
+       SWAC3
+=======================
+
+enable
+conf t
+hostname SWAC3
+
+no ip routing
+no ip domain-lookup
+
+vtp version 2
+vtp mode client
+vtp domain SANTO-DOMINGO
+vtp password N3tS3c
+
+interface vlan999
+description VLAN 999 NATIVA
+ip address 10.16.2.70 255.255.255.248
+no shutdown
+exit
+
+interface range e0/0-3 
+switchport mode access
+switchport access vlan 999
+duplex full
+exit
+
+ip dhcp snooping
+ip dhcp snooping vlan 10,15,20,30
+no ip dhcp snooping information option
+
+interface range e0/0-1
+description LINK-TO-SWM
+switchport trunk encapsulation dot1q
+switchport mode trunk
+switchport trunk native vlan 999
+switchport trunk allowed vlan 10,15,20,30,999
+switchport nonegotiate
+duplex full
+ip dhcp snooping trust
+exit
+
+spanning-tree mode rapid-pvst
+
+interface e0/2
+switchport access vlan 30
+spanning-tree portfast
+spanning-tree bpduguard enable
+switchport port-security
+switchport port-security maximum 2
+switchport port-security violation restrict
+switchport port-security mac-address sticky
+no shutdown
+exit
+
+interface e0/3
+switchport access vlan 20
+spanning-tree portfast
+spanning-tree bpduguard enable
+switchport port-security
+switchport port-security maximum 2
+switchport port-security violation restrict
+switchport port-security mac-address sticky
+no shutdown
+exit
+
+ip default-gateway 10.16.2.65
+
+aaa new-model
+username admin privilege 15 secret N3tS3c-2025
+ip domain-name netsec-solutions.com.do
+crypto key generate rsa modulus 1024
+
+ip ssh version 2
+
+radius server SRV-NETSEC
+address ipv4 10.17.0.43 auth-port 1812 acct-port 1813
+key NetSecSecret123
+exit
+
+aaa group server radius GRUPO-NETSEC
+server name SRV-NETSEC
+exit
+
+aaa authentication login default group GRUPO-NETSEC local
+aaa authorization exec default group GRUPO-NETSEC local
+
+access-list 7 remark SOLO-ACCESO-TI-STGO
+access-list 7 permit 10.17.0.0 0.0.0.31
+access-list 7 deny any 
+
+line vty 0 4
+transport input ssh
+login authentication default
+access-class 7 in
+exit
+
+do wr
