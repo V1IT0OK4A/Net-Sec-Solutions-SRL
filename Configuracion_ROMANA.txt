@@ -1,0 +1,355 @@
+-Configuración ROMANA
+NetSec Solutions SRL - Empresa 1
+
+==========
+R-ROM
+===========
+
+en
+conf t
+hostname R-ROM
+
+no ip cef
+
+username admin privilege 15 secret N3tS3c-2025
+ip domain-name netsec-solutions.com.do
+crypto key generate rsa modulus 1024
+
+aaa new-model
+radius-server host 10.17.0.43 auth-port 1812 acct-port 1813 key NetSecSecret123
+aaa authentication login default group radius local
+aaa authorization exec default group radius local 
+ip ssh version 2
+
+access-list 7 remark SOLO-ACCESO-TI-STGO
+access-list 7 permit 10.17.0.0 0.0.0.31
+access-list 7 deny any 
+
+line vty 0 4
+transport input ssh
+login authentication default
+access-class 7 in
+exit
+
+int e0/0
+ip address dhcp
+description Romana-ISP
+ip nat outside
+no shutdown
+exit
+
+int e0/1
+description VLANs
+no shutdown
+exit
+
+int e0/1.25
+description VLAN25-ALMACEN
+encapsulation dot1Q 25
+ip address 10.18.0.1 255.255.255.128
+ip helper-address 10.17.0.44
+ip nat inside
+no shutdown
+exit
+
+int e0/1.35
+description VLAN35-PROYECTOS
+encapsulation dot1Q 35
+ip address 10.18.0.129 255.255.255.224
+ip helper-address 10.17.0.44
+ip nat inside
+no shutdown
+exit
+
+int e0/1.45
+description VLAN45-GERENCIA
+encapsulation dot1Q 45
+ip address 10.18.0.161 255.255.255.240
+ip helper-address 10.17.0.44
+ip nat inside
+no shutdown
+exit
+
+int e0/1.777
+encapsulation dot1Q 777 native
+ip address 10.18.0.177 255.255.255.248
+ip helper-address 10.17.0.44
+ip nat inside
+no shutdown
+exit
+
+access-list 1 permit 10.18.0.0 0.0.255.255
+ip nat inside source list 1 interface e0/0 overload
+
+int tunnel 1
+ip add 10.16.2.75 255.255.255.248 
+tunnel source e0/0
+tunnel mode gre multipoint
+ip nhrp network-id 10
+ip nhrp authentication NetSec
+ip nhrp map multicast dynamic
+ip nhrp map 10.16.2.74 1.0.0.9
+ip nhrp map multicast 1.0.0.9
+ip nhrp nhs 10.16.2.74
+ip mtu 1400
+ip tcp adjust-mss 1360
+exit
+
+interface tunnel 1
+ip ospf network broadcast
+ip ospf priority 0
+exit
+ 
+crypto isakmp policy 1
+encryption aes
+hash sha512
+authentication pre-share
+group 14
+lifetime 86400
+exit
+
+crypto isakmp keepalive 10 10
+crypto isakmp invalid-spi-recovery
+
+crypto isakmp key N3tS3cVPN address 0.0.0.0 0.0.0.0
+crypto ipsec transform-set NS-VPN esp-aes esp-sha512-hmac
+mode transport
+exit
+ 
+crypto ipsec profile NETSEC-VPN
+set transform-set NS-VPN
+exit
+ 
+interface tunnel 1
+tunnel protection ipsec profile NETSEC-VPN
+exit
+
+router ospf 1
+router-id 3.3.3.3
+network 10.18.0.0 0.0.0.127 area 0
+network 10.18.0.128 0.0.0.31 area 0
+network 10.18.0.160 0.0.0.15 area 0
+network 10.18.0.176 0.0.0.7 area 0
+network 10.16.2.72 0.0.0.7 area 0
+Passive-interface e0/1.25
+Passive-interface e0/1.35
+Passive-interface e0/1.45
+Passive-interface e0/1.777
+exit
+wr
+______________________________________________________
+
+=============
+SW1-ROM (SW7-ROM)
+=============
+
+en
+conf t
+hostname SW7-ROM
+
+no ip routing
+
+aaa new-model
+username admin privilege 15 secret N3tS3c-2025
+ip domain-name netsec-solutions.com.do
+crypto key generate rsa modulus 1024
+
+ip ssh version 2
+
+radius server SRV-NETSEC
+address ipv4 10.17.0.43 auth-port 1812 acct-port 1813
+key NetSecSecret123
+exit
+
+aaa group server radius GRUPO-NETSEC
+server name SRV-NETSEC
+exit
+
+aaa authentication login default group GRUPO-NETSEC local
+aaa authorization exec default group GRUPO-NETSEC local
+
+access-list 7 remark SOLO-ACCESO-TI-STGO
+access-list 7 permit 10.17.0.0 0.0.0.31
+access-list 7 deny any 
+
+line vty 0 4
+transport input ssh
+login authentication default
+access-class 7 in
+exit
+
+vtp mode server
+vtp domain NetSec-ROM
+vtp password N3tS3c
+
+vlan 25
+name ALMACEN-ROM 
+exit
+
+vlan 35
+name PROYECTOS-ROM 
+exit
+
+vlan 45
+name GERENCIA-ROM
+exit
+
+vlan 777
+name Native
+exit
+
+int vlan 777
+ip address 10.18.0.178 255.255.255.248
+description Native
+no shutdown
+exit
+
+ip default-gateway 10.18.0.177
+
+ip dhcp snooping
+ip dhcp snooping vlan 25,35,45
+no ip dhcp snooping information option
+
+int e0/0
+switchport trunk encapsulation dot1q
+duplex half
+switchport mode trunk
+switchport trunk native vlan 777
+switchport trunk allowed vlan 25,35,45,777
+ip dhcp snooping trust
+duplex full
+exit
+
+int range e0/1-3
+switchport trunk encapsulation dot1q
+switchport mode trunk
+switchport trunk native vlan 777
+switchport trunk allowed vlan 25,35,45,777
+ip dhcp snooping trust
+duplex full
+exit
+
+int e1/0
+switchport mode access
+switchport access vlan 45
+spanning-tree portfast
+spanning-tree bpduguard enable
+switchport port-security
+switchport port-security maximum 2
+switchport port-security violation restrict
+switchport port-security mac-address sticky
+exit
+
+do wr
+______________________________________________________
+
+============
+SW2-ROM (SW8-ROM)
+============
+
+en
+conf t
+hostname SW8-ROM
+
+no ip routing
+
+aaa new-model
+username admin privilege 15 secret N3tS3c-2025
+ip domain-name netsec-solutions.com.do
+crypto key generate rsa modulus 1024
+
+ip ssh version 2
+
+radius server SRV-NETSEC
+address ipv4 10.17.0.43 auth-port 1812 acct-port 1813
+key NetSecSecret123
+exit
+
+aaa group server radius GRUPO-NETSEC
+server name SRV-NETSEC
+exit
+
+aaa authentication login default group GRUPO-NETSEC local
+aaa authorization exec default group GRUPO-NETSEC local
+
+access-list 7 remark SOLO-ACCESO-TI-STGO
+access-list 7 permit 10.17.0.0 0.0.0.31
+access-list 7 deny any 
+
+line vty 0 4
+transport input ssh
+login authentication default
+access-class 7 in
+exit
+
+vtp mode client
+vtp domain NetSec-ROM
+vtp password N3tS3c
+
+ip dhcp snooping
+ip dhcp snooping vlan 25,35,45
+
+int range e0/1-3
+switchport trunk encapsulation dot1q
+switchport mode trunk
+switchport trunk native vlan 777
+switchport trunk allowed vlan 25,35,45,777
+duplex full
+ip dhcp snooping trust
+exit
+
+int e0/0
+duplex full
+exit
+
+int vlan 777
+ip address 10.18.0.179 255.255.255.248
+description Native
+no shutdown
+exit
+
+ip default-gateway 10.18.0.177
+
+int e1/0
+shutdown
+switchport mode access
+switchport access vlan 25
+spanning-tree portfast
+spanning-tree bpduguard enable
+switchport port-security
+switchport port-security maximum 2
+switchport port-security violation restrict
+switchport port-security mac-address sticky
+no shutdown
+exit
+
+int e1/1
+shutdown
+switchport mode access
+switchport access vlan 35
+spanning-tree portfast
+spanning-tree bpduguard enable
+switchport port-security
+switchport port-security maximum 2
+switchport port-security violation restrict
+switchport port-security mac-address sticky
+no shutdown
+exit
+
+int e1/2
+shutdown
+switchport mode access
+switchport access vlan 45
+spanning-tree portfast
+spanning-tree bpduguard enable
+switchport port-security
+switchport port-security maximum 2
+switchport port-security violation restrict
+switchport port-security mac-address sticky
+no shutdown
+exit
+
+no ip dhcp snooping information option
+
+end
+wr
