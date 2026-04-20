@@ -46,3 +46,11 @@ Colaboración: Suite de mensajería corporativa configurada con Postfix (SMTP) y
 Seguridad Interna: Uso de DHCP Snooping, Port-Security (Sticky MACs) y BPDU Guard en la capa de acceso para mitigar ataques internos y bucles de red.
 
 Nota de Seguridad: Todos los accesos administrativos (VTY) están restringidos mediante Listas de Control de Acceso (ACL) que solo permiten la gestión desde la red de TI en Santiago, cumpliendo con los estándares de seguridad de NetSec Solutions SRL.
+
+Componente,Detalle Técnico
+Dominio Corporativo,netsec-solutions.com.do
+Esquema de Direccionamiento,Privado Clase A (10.16.0.0/14 modificado)
+VPN ID / NHRP,Network-ID: 10 / Auth: NetSec
+Cifrado IPSec,AES + SHA-512 (Diffie-Hellman Grupo 14)
+Usuario Admin,admin / N3tS3c-2025
+Servidores Críticos,10.17.0.43 (RADIUS/Mail) y 10.17.0.44 (DHCP/DNS)
